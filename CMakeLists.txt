@@ -97,15 +97,27 @@ include_directories(3rd-party/pybind11/include)
 add_subdirectory(3rd-party/nlohmann_json_cmake_fetchcontent)
 include_directories(3rd-party/nlohmann_json_cmake_fetchcontent/single_include)
 
-# 检查 3rd-party/llvm-project 是否存在
-if(NOT EXISTS "${PROJECT_SOURCE_DIR}/3rd-party/llvm-project")
-    message(FATAL_ERROR "The 'llvm-project' submodule is not initialized. Please run 'git submodule update --init --recursive' to initialize and update submodules.")
+# find llvm-project
+file(GLOB_RECURSE DIRECTORY_CONTENTS "${PROJECT_SOURCE_DIR}/3rd-party/llvm-project/*")
+
+if(NOT DIRECTORY_CONTENTS)
+    message(FATAL_ERROR "The 'llvm-project' directory is empty. Please ensure the submodule is properly initialized and contains the necessary files.")
 endif()
 
-# 检查 CMake 配置文件是否存在
 if(NOT EXISTS "${PROJECT_SOURCE_DIR}/3rd-party/llvm-project/build/lib/cmake/llvm/LLVMConfig.cmake")
     message(FATAL_ERROR "LLVMConfig.cmake not found. Please ensure 'llvm-project' is built and configured properly.")
 endif()
+
+# build mlir
+# don't use clang and lld to speed up the build
+# need use RTTI, -DLLVM_ENABLE_RTTI=ON
+# can use ccache, -DLLVM_CCACHE_BUILD=ON
+# use following command to build mlir:
+# mkdir 3rd-party/llvm-project/build
+# cd 3rd-party/llvm-project/build
+# cmake -G Ninja ../llvm -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=ON -DLLVM_TARGETS_TO_BUILD="Native;NVPTX;AMDGPU" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_CCACHE_BUILD=ON
+# cmake --build .
+
 
 # set LLVM_DIR
 set(LLVM_DIR ${PROJECT_SOURCE_DIR}/3rd-party/llvm-project/build/lib/cmake/llvm)
