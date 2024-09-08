@@ -20,6 +20,7 @@ endif()
 include(CMakeDependentOption)
 project(InfiniTensor C CXX)
 
+cmake_dependent_option(BUILD_TEST_INFINIMLIR "Build tests for infinimlir components" ON BUILD_TEST OFF)
 cmake_dependent_option(BUILD_TEST_CORE "Build tests for core components" ON BUILD_TEST OFF)
 cmake_dependent_option(BUILD_TEST_PET "Build tests for PET" OFF BUILD_TEST OFF)
 
@@ -96,6 +97,21 @@ include_directories(3rd-party/pybind11/include)
 add_subdirectory(3rd-party/nlohmann_json_cmake_fetchcontent)
 include_directories(3rd-party/nlohmann_json_cmake_fetchcontent/single_include)
 
+# set LLVM_DIR
+set(LLVM_DIR ${PROJECT_SOURCE_DIR}/3rd-party/llvm-project/build/lib/cmake/llvm)
+
+# set MLIR_DIR
+set(MLIR_DIR ${PROJECT_SOURCE_DIR}/3rd-party/llvm-project/build/lib/cmake/mlir)
+
+# find LLVM and MLIR
+find_package(LLVM REQUIRED CONFIG)
+find_package(MLIR REQUIRED CONFIG)
+
+include_directories(${LLVM_INCLUDE_DIRS})
+include_directories(${MLIR_INCLUDE_DIRS})
+
+get_property(MLIR_ALL_LIBS GLOBAL PROPERTY MLIR_ALL_LIBS)
+
 # TVM backend
 if(BUILD_NNET AND BUILD_TEST)
   # TVM and DMLC for invoking TVM packed functions
@@ -127,7 +143,8 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -UNDEBUG")
 
 
 # Source files
-file(GLOB_RECURSE SRC src/ffi/*.cc src/core/*.cc src/kernels/cpu/*.cc src/operators/*.cc src/utils/*.cc)
+file(GLOB_RECURSE SRC src/ffi/*.cc src/core/*.cc src/kernels/cpu/*.cc src/operators/*.cc src/utils/*.cc 
+src/infinimlir/Conversion/*.cpp src/infinimlir/Dialect/*.cpp src/infinimlir/Execution/*.cpp src/infinimlir/Passes/*.cpp src/infinimlir/Utils/*.cpp)
 
 if(BUILD_NNET)
   add_compile_definitions(BUILD_NNET=1)
@@ -167,6 +184,11 @@ add_library(InfiniTensor SHARED ${SRC})
 if(USE_PROTOBUF)
   target_link_libraries(InfiniTensor tensor_proto)
 endif()
+
+target_link_libraries(InfiniTensor
+  ${LLVM_AVAILABLE_LIBS}
+  ${MLIR_ALL_LIBS}
+)
 
 target_link_libraries(InfiniTensor pybind11::embed)
 
@@ -395,6 +417,9 @@ if(BUILD_TEST)
     if (USE_INTELCPU)
       build_test(test/kernels/intelcpu/*.cc)
     endif()
+  endif()
+  if(BUILD_TEST_INFINIMLIR)
+    build_test(test/infinimlir/*.cpp)
   endif()
   if(BUILD_TEST_PET)
     build_test(test/pet/*.cc)

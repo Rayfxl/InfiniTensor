@@ -1,5 +1,6 @@
 #include "core/graph.h"
 #include "operators/reshape.h"
+#include "infinimlir/Execution/MLIRExecutionEngine.h"
 #include <algorithm>
 #include <numeric>
 #include <queue>
@@ -119,12 +120,9 @@ bool GraphObj::topo_sort() {
 }
 
 void GraphObj::optimize() {
-    for (auto &op : ops) {
-        switch (op->getOpType().underlying()) {
-        default:
-            break;
-        }
-    }
+    mlir::MLIRContext context;
+    infini::infini_mlir::MLIRExecutionEngine engine(context);
+    engine.compileAndRun(this);
 }
 
 Tensor GraphObj::getTensor(int fuid) const {
