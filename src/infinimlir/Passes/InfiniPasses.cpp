@@ -1,53 +1,44 @@
-#include "infinimlir/Dialect/InfiniOps.h"
-#include "mlir/IR/PatternMatch.h"
+#include "infinimlir/Passes/InfiniPasses.h"
 
 namespace infini {
 namespace infini_mlir {
 
-struct SimplifyRedundantTranspose : public ::mlir::OpRewritePattern<TransposeOp> {
-    using OpRewritePattern<TransposeOp>::OpRewritePattern;
+::llvm::LogicalResult SimplifyRedundantTranspose::matchAndRewrite(TransposeOp op, ::mlir::PatternRewriter &rewriter) const {
+    ::mlir::Value input = op.getInput();
+    ::mlir::Operation *definingOp = input.getDefiningOp();
+    // check existence of lastop
+    if (!definingOp)
+        return ::mlir::failure();
+    
+    // check if lastop is a TransposeOp
+    auto prevTranspose = ::llvm::dyn_cast<TransposeOp>(definingOp);
+    if (!prevTranspose)
+        return ::mlir::failure();
 
-    ::llvm::LogicalResult matchAndRewrite(TransposeOp op, ::mlir::PatternRewriter &rewriter) const override {
-        ::mlir::Value input = op.getInput();
-        ::mlir::Operation *definingOp = input.getDefiningOp();
-        // check existence of lastop
-        if (!definingOp)
-            return ::mlir::failure();
-        
-        // check if lastop is a TransposeOp
-        auto prevTranspose = ::llvm::dyn_cast<TransposeOp>(definingOp);
-        if (!prevTranspose)
-            return ::mlir::failure();
+    // check if the input of the lastop is the same as the output of the current op
+    ::mlir::Value result = definingOp->getResult(0);
+    if (result != input)
+        return ::mlir::failure();
+    
+    // check if the permutation of the lastop is the same as the permutation of the current op
+    auto currentPermutation = op.getPermutation();
+    auto prevPermutation = prevTranspose.getPermutation();
+    if (currentPermutation != prevPermutation)
+        return ::mlir::failure();
 
-        // check if the input of the lastop is the same as the output of the current op
-        ::mlir::Value result = definingOp->getResult(0);
-        if (result != input)
-            return ::mlir::failure();
-        
-        // check if the permutation of the lastop is the same as the permutation of the current op
-        auto currentPermutation = op.getPermutation();
-        auto prevPermutation = prevTranspose.getPermutation();
-        if (currentPermutation != prevPermutation)
-            return ::mlir::failure();
-
-         // replace current op with the input of the lastop
-        rewriter.replaceOp(op, definingOp -> getOperand(0));
-        // delete the lastop
-        rewriter.eraseOp(definingOp);
-        
-        return ::mlir::success();
-    }
-};
+    // replace current op with the input of the lastop
+    rewriter.replaceOp(op, definingOp -> getOperand(0));
+    // delete the lastop
+    rewriter.eraseOp(definingOp);
+    
+    return ::mlir::success();
+}
 
 void TransposeOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
     results.add<SimplifyRedundantTranspose>(context);
 }
 
-
-struct FuseTransposeMatmul : public ::mlir::OpRewritePattern<MatMulOp> {
-  using OpRewritePattern<MatMulOp>::OpRewritePattern;
-
-  ::llvm::LogicalResult matchAndRewrite(MatMulOp op, ::mlir::PatternRewriter &rewriter) const override {
+::llvm::LogicalResult FuseTransposeMatmul::matchAndRewrite(MatMulOp op, ::mlir::PatternRewriter &rewriter) const {
     // get operands
     ::mlir::Value lhs = op.getLhs();
     ::mlir::Value rhs = op.getRhs();
@@ -81,18 +72,17 @@ struct FuseTransposeMatmul : public ::mlir::OpRewritePattern<MatMulOp> {
     // create a new MatMulOp with the new operands and the transpose attributes
     auto newMatMul = rewriter.create<MatMulOp>(op.getLoc(), resultType, lhs, rhs, transposeLhs, transposeRhs);
     
-    
     // replace the current MatMulOp with the new MatMulOp
     rewriter.replaceOp(op, newMatMul.getResult());
     // delete the TransposeOps if they exist
     if (lhsTranspose) rewriter.eraseOp(lhsTranspose);
     if (rhsTranspose) rewriter.eraseOp(rhsTranspose);
     return ::mlir::success();
-  }
-};
+}
 
 void MatMulOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results, ::mlir::MLIRContext *context) {
     results.add<FuseTransposeMatmul>(context);
 }
+
 }// namespace infini_mlir
 }// namespace infini

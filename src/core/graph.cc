@@ -122,7 +122,13 @@ bool GraphObj::topo_sort() {
 void GraphObj::optimize() {
     mlir::MLIRContext context;
     infini::infini_mlir::MLIRExecutionEngine engine(context);
-    engine.compileAndRun(this);
+    Graph optimizedGraph = engine.compileAndRun(this);
+
+    if (optimizedGraph) {
+        // update graph with optimized operators and tensors
+        this->tensors = optimizedGraph->getTensors();
+        this->ops = optimizedGraph->getOperators();
+    }
 }
 
 Tensor GraphObj::getTensor(int fuid) const {

@@ -1,8 +1,10 @@
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Transforms/Passes.h"
 #include "infinimlir/Execution/MLIRExecutionEngine.h"
 #include "infinimlir/Conversion/InfiniToMLIR.h"
-#include "mlir/IR/DialectRegistry.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "infinimlir/Passes/InfiniPasses.h"
+#include "infinimlir/Conversion/MLIRToInfini.h"
+#include "infinimlir/Utils/MLIRUtils.h"
 
 namespace infini {
 namespace infini_mlir {
@@ -15,7 +17,7 @@ MLIRExecutionEngine::MLIRExecutionEngine(mlir::MLIRContext &context)
     passManager.addPass(mlir::createCanonicalizerPass());
 }
 
-void MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
+Graph MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
     mlir::OpBuilder builder(&context);
     // create module
     auto module = mlir::ModuleOp::create(builder.getUnknownLoc());
@@ -25,15 +27,16 @@ void MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
     // get input types for function signature
     std::vector<mlir::Type> inputTypes;
     for (const auto &inputTensor : graph->getInputs()) {
-        auto type = convertTensorToMLIRType(builder, inputTensor);
+        // auto type = convertTensorToMLIRType(builder, inputTensor);
+        auto type = mlir::RankedTensorType::get(int_to_int64t(inputTensor->getDims()), builder.getF32Type());
         inputTypes.push_back(type);
-      
     }
     
     // get the last operation in the graph
     auto lastOp = graph->getOperators().back();
     // get output type for function signature
-    auto outputType = convertTensorToMLIRType(builder, lastOp->getOutput());
+    // auto outputType = convertTensorToMLIRType(builder, lastOp->getOutput());
+    auto outputType = mlir::RankedTensorType::get(int_to_int64t(lastOp->getOutput()->getDims()), builder.getF32Type());
     // create function type
     auto funcType = builder.getFunctionType(inputTypes, outputType);
     
@@ -65,14 +68,12 @@ void MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
                     inputs.push_back(tensorToArgumentMap[inputTensor]);
                 } else {
                     std::cerr << "Error: Missing input tensor argument!" << std::endl;
-                    return;
                 }
             } else {
                 if (opToResultMap.find(producer -> getGuid()) != opToResultMap.end()) {
                     inputs.push_back(opToResultMap[producer -> getGuid()]);
                 } else {
                     std::cerr << "Error: Missing input from previous operation!" << std::endl;
-                    return;
                 }
             }            
         }
@@ -83,7 +84,6 @@ void MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
             opToResultMap[op -> getGuid()] = mlirOp->getResult(0);
         } else {
             std::cerr << "Failed to convert operation." << std::endl;
-            return;
         }
     }
     
@@ -93,7 +93,6 @@ void MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), finalResult);
     } else {
         std::cerr << "Error: Missing final operation result!" << std::endl;
-        return;
     }
     // add function to module
     module.push_back(func);
@@ -102,11 +101,14 @@ void MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
 
     if (mlir::failed(passManager.run(module))) {
         module.emitError("Optimization failed.");
-        return;
     }
     // print after optimization
     module.dump();
- 
+
+    // convert MLIR module to Infini graph
+    Graph optimizedGraph = convertMLIRToInfini(module);
+
+    return optimizedGraph;
 }
 
 }// namespace infini_mlir
