@@ -27,7 +27,6 @@ Graph MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
     // get input types for function signature
     std::vector<mlir::Type> inputTypes;
     for (const auto &inputTensor : graph->getInputs()) {
-        // auto type = convertTensorToMLIRType(builder, inputTensor);
         auto type = mlir::RankedTensorType::get(int_to_int64t(inputTensor->getDims()), builder.getF32Type());
         inputTypes.push_back(type);
     }
@@ -35,7 +34,6 @@ Graph MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
     // get the last operation in the graph
     auto lastOp = graph->getOperators().back();
     // get output type for function signature
-    // auto outputType = convertTensorToMLIRType(builder, lastOp->getOutput());
     auto outputType = mlir::RankedTensorType::get(int_to_int64t(lastOp->getOutput()->getDims()), builder.getF32Type());
     // create function type
     auto funcType = builder.getFunctionType(inputTypes, outputType);
@@ -52,7 +50,6 @@ Graph MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
         mlir::Value arg = entryBlock->getArgument(i);
         tensorToArgumentMap[graph->getInputs()[i]] = arg;
     }
-
     // create mapping from operation to result value
     std::unordered_map<UidBaseType, mlir::Value> opToResultMap;
 
@@ -61,19 +58,20 @@ Graph MLIRExecutionEngine::compileAndRun(GraphObj *graph) {
         std::vector<mlir::Value> inputs;
         for (const auto &inputTensor : op->getInputs()) {
             Operator producer = inputTensor->getSource();
-            // if no producer, then input is an argument of the function
+            // if no producer, then input is an input tensor or weight tensor
             // otherwise, input is the result of the producer operation
             if (!producer) {
                 if (tensorToArgumentMap.find(inputTensor) != tensorToArgumentMap.end()) {
                     inputs.push_back(tensorToArgumentMap[inputTensor]);
                 } else {
-                    std::cerr << "Error: Missing input tensor argument!" << std::endl;
+                    // TODO: handle weight tensors
+                    std::cout << "It's a weight tensor" << std::endl;
                 }
             } else {
                 if (opToResultMap.find(producer -> getGuid()) != opToResultMap.end()) {
                     inputs.push_back(opToResultMap[producer -> getGuid()]);
                 } else {
-                    std::cerr << "Error: Missing input from previous operation!" << std::endl;
+                    std::cerr << "Error: Missing output from previous operation!" << std::endl;
                 }
             }            
         }

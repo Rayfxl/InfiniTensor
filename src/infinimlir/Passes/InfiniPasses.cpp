@@ -26,7 +26,7 @@ namespace infini_mlir {
     if (currentPermutation != prevPermutation)
         return ::mlir::failure();
 
-    // replace current op with the input of the lastop
+    // replace current op output with the input of the lastop
     rewriter.replaceOp(op, definingOp -> getOperand(0));
     // delete the lastop
     rewriter.eraseOp(definingOp);
@@ -73,7 +73,7 @@ void TransposeOp::getCanonicalizationPatterns(::mlir::RewritePatternSet &results
     auto newMatMul = rewriter.create<MatMulOp>(op.getLoc(), resultType, lhs, rhs, transposeLhs, transposeRhs);
     
     // replace the current MatMulOp with the new MatMulOp
-    rewriter.replaceOp(op, newMatMul.getResult());
+    rewriter.replaceOp(op, newMatMul);
     // delete the TransposeOps if they exist
     if (lhsTranspose) rewriter.eraseOp(lhsTranspose);
     if (rhsTranspose) rewriter.eraseOp(rhsTranspose);
